@@ -1,86 +1,67 @@
-// server.js - debug-friendly Gemini/OpenAI router (ESM)
+// server.js
 import express from "express";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
-import path from "path";
-import { fileURLToPath } from "url";
 import fetch from "node-fetch";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static("public"));
 
-function activeMode() {
-  if (process.env.OPENAI_API_KEY) return "openai";
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  return "none";
-}
+const PORT = process.env.PORT || 3000;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-// print env at startup
-console.log("--- startup: reading env ----");
-console.log("GEMINI_API_KEY present?", !!process.env.GEMINI_API_KEY);
-console.log("GEMINI_MODEL =", process.env.GEMINI_MODEL);
-console.log("OPENAI_API_KEY present?", !!process.env.OPENAI_API_KEY);
-console.log("--- end env ----");
+// 🧠 Health check route
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    mode: "openai",
+    model: OPENAI_MODEL,
+    timestamp: new Date().toISOString(),
+  });
+});
 
-app.get("/health", (req, res) =>
-  res.json({ ok: true, mode: activeMode(), env_model: process.env.GEMINI_MODEL || null })
-);
-
+// 🧩 Chat route
 app.post("/api/chat", async (req, res) => {
   try {
-    const prompt = (req.body?.prompt || "").toString().trim();
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "Missing prompt" });
+    if (!OPENAI_KEY)
+      return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
 
-    const mode = activeMode();
-    if (mode === "openai") {
-      return res.status(500).json({ error: "OpenAI path disabled for debug" });
-    }
-    if (mode !== "gemini") {
-      return res.status(500).json({ error: "No GEMINI_API_KEY set" });
-    }
-
-    const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.5-flash";
-    console.log("[API] Using GEMINI_MODEL from env:", GEMINI_MODEL);
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    console.log("[API] POST to:", endpoint);
-
-    const resp = await fetch(endpoint, {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      headers: {
+        "Authorization": `Bearer ${OPENAI_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+      }),
     });
 
-    const bodyText = await resp.text();
-    console.log("[API] raw response status=", resp.status);
-    console.log("[API] raw response body (first 2000 chars):\n", bodyText.substring(0, 2000));
-
-    let data = null;
-    try {
-      data = JSON.parse(bodyText);
-    } catch (e) {
-      /* ignore JSON parse errors */
+    const data = await response.json();
+    if (data.error) {
+      console.error("[OpenAI error]", data.error);
+      return res.status(500).json({ error: "OpenAI error", details: data.error });
     }
 
-    if (!resp.ok) return res.status(resp.status).json({ error: "Gemini API error", details: data || bodyText });
-
-    const answer = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? data?.output_text ?? null;
-    return res.json({ answer: answer || "No text in response", raw: data ?? bodyText });
+    const text = data.choices?.[0]?.message?.content?.trim() || "No response.";
+    res.json({ answer: text });
   } catch (err) {
-    console.error("[Server] unexpected", err);
-    return res.status(500).json({ error: "Internal Server Error", details: err?.message || String(err) });
+    console.error("[server] /api/chat failed:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
   }
 });
 
+// 🌍 Start server
 app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-  console.log("Active mode =", activeMode());
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🔹 Mode: OpenAI`);
+  console.log(`🔹 Model: ${OPENAI_MODEL}`);
 });
