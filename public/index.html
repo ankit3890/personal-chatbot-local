@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Personal Chatbot</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="container" role="main">
+    <header>
+      <h1>Personal Chatbot</h1>
+      <p class="subtitle">Type a question and press <strong>Send</strong>. (Ctrl+Enter to send)</p>
+    </header>
+
+    <section class="chatbox" aria-label="Chat area">
+      <label for="prompt" class="sr-only">Enter your question</label>
+      <textarea id="prompt" placeholder="Ask me anything..." rows="6">Hello, who are you?</textarea>
+
+      <div class="controls">
+        <button id="send" class="btn primary">Send</button>
+        <button id="replay" class="btn" disabled>🔊 Replay</button>
+        <button id="clear" class="btn">Clear</button>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="answer" class="answer" aria-live="polite"></div>
+    </section>
+
+    <footer class="footer">
+      <small>Local demo • Uses server at <code>/api/chat</code></small>
+    </footer>
+  </main>
+
+  <script src="/script.js"></script>
+</body>
+</html>
